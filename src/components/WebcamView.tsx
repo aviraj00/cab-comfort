@@ -1,0 +1,202 @@
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { Camera, CameraOff, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { PostureLandmarks } from '@/utils/rulaCalculations';
+
+interface WebcamViewProps {
+  onVideoReady: (video: HTMLVideoElement) => void;
+  isLoading: boolean;
+  landmarks: PostureLandmarks | null;
+  isDetecting: boolean;
+}
+
+// MediaPipe pose connections for skeleton drawing
+const POSE_CONNECTIONS = [
+  [11, 12], // shoulders
+  [11, 13], // left shoulder to left elbow
+  [13, 15], // left elbow to left wrist
+  [12, 14], // right shoulder to right elbow
+  [14, 16], // right elbow to right wrist
+  [11, 23], // left shoulder to left hip
+  [12, 24], // right shoulder to right hip
+  [23, 24], // hips
+];
+
+export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting }: WebcamViewProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const startCamera = useCallback(async () => {
+    try {
+      setCameraError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play();
+          setCameraActive(true);
+          onVideoReady(videoRef.current!);
+        };
+      }
+    } catch (err) {
+      setCameraError('Unable to access camera. Please check permissions.');
+    }
+  }, [onVideoReady]);
+
+  const stopCamera = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+      setCameraActive(false);
+    }
+  }, []);
+
+  // Draw skeleton overlay
+  useEffect(() => {
+    if (!landmarks || !canvasRef.current || !videoRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const video = videoRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw connections
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)';
+    ctx.lineWidth = 3;
+
+    const landmarkArray = [
+      undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, landmarks.leftEar, landmarks.rightEar,
+      undefined, undefined,
+      landmarks.leftShoulder, landmarks.rightShoulder,
+      landmarks.leftElbow, landmarks.rightElbow,
+      landmarks.leftWrist, landmarks.rightWrist,
+      undefined, undefined, undefined, undefined,
+      undefined, undefined,
+      landmarks.leftHip, landmarks.rightHip,
+    ];
+
+    POSE_CONNECTIONS.forEach(([start, end]) => {
+      const startLandmark = landmarkArray[start];
+      const endLandmark = landmarkArray[end];
+      
+      if (startLandmark && endLandmark) {
+        ctx.beginPath();
+        ctx.moveTo(startLandmark.x * canvas.width, startLandmark.y * canvas.height);
+        ctx.lineTo(endLandmark.x * canvas.width, endLandmark.y * canvas.height);
+        ctx.stroke();
+      }
+    });
+
+    // Draw landmark points
+    ctx.fillStyle = '#22c55e';
+    Object.values(landmarks).forEach(landmark => {
+      if (landmark) {
+        ctx.beginPath();
+        ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 5, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    });
+  }, [landmarks]);
+
+  return (
+    <div className="glass-card overflow-hidden">
+      <div className="relative aspect-video bg-background">
+        {!cameraActive && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+            {cameraError ? (
+              <>
+                <CameraOff className="w-16 h-16 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground text-center px-4">{cameraError}</p>
+                <Button onClick={startCamera} variant="default">
+                  Try Again
+                </Button>
+              </>
+            ) : (
+              <>
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center"
+                >
+                  <Camera className="w-12 h-12 text-primary" />
+                </motion.div>
+                <p className="text-muted-foreground text-sm">Enable camera for posture detection</p>
+                <Button onClick={startCamera} className="gap-2">
+                  <Camera className="w-4 h-4" />
+                  Start Camera
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover"
+          style={{ transform: 'scaleX(-1)', display: cameraActive ? 'block' : 'none' }}
+          playsInline
+          muted
+        />
+        
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ transform: 'scaleX(-1)' }}
+        />
+
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-10 h-10 text-primary animate-spin" />
+              <p className="text-sm text-muted-foreground">Initializing AI model...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Status indicator */}
+        {cameraActive && (
+          <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-card/80 backdrop-blur-sm px-3 py-1.5 rounded-full">
+            <motion.div
+              className={`w-2 h-2 rounded-full ${isDetecting ? 'bg-success' : 'bg-warning'}`}
+              animate={{ opacity: isDetecting ? [1, 0.5, 1] : 1 }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            />
+            <span className="text-xs text-muted-foreground">
+              {isDetecting ? 'Analyzing' : 'Waiting...'}
+            </span>
+          </div>
+        )}
+
+        {/* Stop button */}
+        {cameraActive && (
+          <Button
+            onClick={stopCamera}
+            variant="ghost"
+            size="sm"
+            className="absolute bottom-4 right-4 bg-card/80 backdrop-blur-sm hover:bg-card/90"
+          >
+            <CameraOff className="w-4 h-4 mr-2" />
+            Stop
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
