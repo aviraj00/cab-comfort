@@ -69,6 +69,7 @@ const Index = () => {
                 isLoading={isLoading}
                 landmarks={landmarks}
                 isDetecting={isDetecting}
+                rulaScores={rulaScores}
               />
             </div>
 
