@@ -1,12 +1,13 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, CameraOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PostureLandmarks } from '@/utils/rulaCalculations';
+import { PostureLandmarks, RULAScores } from '@/utils/rulaCalculations';
 
 interface WebcamViewProps {
   onVideoReady: (video: HTMLVideoElement) => void;
   isLoading: boolean;
+  rulaScores: RULAScores | null;
   landmarks: PostureLandmarks | null;
   isDetecting: boolean;
 }
@@ -23,7 +24,14 @@ const POSE_CONNECTIONS = [
   [23, 24], // hips
 ];
 
-export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting }: WebcamViewProps) {
+const riskConfig = {
+  'low': { label: 'Good', color: 'text-success', bgColor: 'bg-success/20', borderColor: 'border-success' },
+  'medium': { label: 'Fair', color: 'text-accent', bgColor: 'bg-accent/20', borderColor: 'border-accent' },
+  'high': { label: 'Poor', color: 'text-warning', bgColor: 'bg-warning/20', borderColor: 'border-warning' },
+  'very-high': { label: 'Critical', color: 'text-destructive', bgColor: 'bg-destructive/20', borderColor: 'border-destructive' },
+};
+
+export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, rulaScores }: WebcamViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -169,6 +177,35 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting }: 
             </div>
           </div>
         )}
+
+        {/* Score overlay */}
+        <AnimatePresence>
+          {cameraActive && rulaScores && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute top-4 left-4 z-10"
+            >
+              <div className={`${riskConfig[rulaScores.risk].bgColor} ${riskConfig[rulaScores.risk].borderColor} border-2 backdrop-blur-md rounded-2xl p-4 min-w-[120px]`}>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-1">RULA Score</p>
+                  <motion.p
+                    key={rulaScores.finalScore}
+                    initial={{ scale: 1.3 }}
+                    animate={{ scale: 1 }}
+                    className={`text-4xl font-bold font-mono ${riskConfig[rulaScores.risk].color}`}
+                  >
+                    {rulaScores.finalScore}
+                  </motion.p>
+                  <p className={`text-sm font-medium ${riskConfig[rulaScores.risk].color}`}>
+                    {riskConfig[rulaScores.risk].label}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Status indicator */}
         {cameraActive && (
