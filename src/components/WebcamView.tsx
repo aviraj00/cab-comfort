@@ -70,6 +70,42 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, ru
     }
   }, []);
 
+  // Get color based on score
+  const getScoreColor = (score: number, maxScore: number): string => {
+    const percentage = score / maxScore;
+    if (percentage <= 0.33) return 'rgba(34, 197, 94, 0.9)'; // green - success
+    if (percentage <= 0.66) return 'rgba(234, 179, 8, 0.9)'; // yellow - warning
+    return 'rgba(239, 68, 68, 0.9)'; // red - danger
+  };
+
+  // Map connections to body parts for coloring
+  const getConnectionColor = (start: number, end: number): string => {
+    if (!rulaScores) return 'rgba(34, 197, 94, 0.9)';
+    
+    // Shoulders line
+    if ((start === 11 && end === 12)) {
+      return getScoreColor(rulaScores.trunk, 6);
+    }
+    // Upper arms (shoulder to elbow)
+    if ((start === 11 && end === 13) || (start === 12 && end === 14)) {
+      return getScoreColor(rulaScores.upperArm, 6);
+    }
+    // Lower arms (elbow to wrist)
+    if ((start === 13 && end === 15) || (start === 14 && end === 16)) {
+      return getScoreColor(rulaScores.lowerArm, 3);
+    }
+    // Trunk (shoulders to hips)
+    if ((start === 11 && end === 23) || (start === 12 && end === 24)) {
+      return getScoreColor(rulaScores.trunk, 6);
+    }
+    // Hips
+    if (start === 23 && end === 24) {
+      return getScoreColor(rulaScores.trunk, 6);
+    }
+    
+    return 'rgba(34, 197, 94, 0.9)';
+  };
+
   // Draw skeleton overlay
   useEffect(() => {
     if (!landmarks || !canvasRef.current || !videoRef.current) return;
@@ -83,10 +119,8 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, ru
     canvas.height = video.videoHeight;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw connections
-    ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
 
     const landmarkArray = [
       undefined, undefined, undefined, undefined, undefined,
@@ -100,11 +134,14 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, ru
       landmarks.leftHip, landmarks.rightHip,
     ];
 
+    // Draw connections with individual colors
     POSE_CONNECTIONS.forEach(([start, end]) => {
       const startLandmark = landmarkArray[start];
       const endLandmark = landmarkArray[end];
       
       if (startLandmark && endLandmark) {
+        const color = getConnectionColor(start, end);
+        ctx.strokeStyle = color;
         ctx.beginPath();
         ctx.moveTo(startLandmark.x * canvas.width, startLandmark.y * canvas.height);
         ctx.lineTo(endLandmark.x * canvas.width, endLandmark.y * canvas.height);
@@ -112,16 +149,61 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, ru
       }
     });
 
-    // Draw landmark points
-    ctx.fillStyle = '#22c55e';
-    Object.values(landmarks).forEach(landmark => {
+    // Draw head/neck indicator
+    if (landmarks.nose && landmarks.leftShoulder && landmarks.rightShoulder) {
+      const neckColor = rulaScores ? getScoreColor(rulaScores.neck, 6) : 'rgba(34, 197, 94, 0.9)';
+      const shoulderMidX = (landmarks.leftShoulder.x + landmarks.rightShoulder.x) / 2;
+      const shoulderMidY = (landmarks.leftShoulder.y + landmarks.rightShoulder.y) / 2;
+      
+      ctx.strokeStyle = neckColor;
+      ctx.beginPath();
+      ctx.moveTo(shoulderMidX * canvas.width, shoulderMidY * canvas.height);
+      ctx.lineTo(landmarks.nose.x * canvas.width, landmarks.nose.y * canvas.height);
+      ctx.stroke();
+      
+      // Draw head circle
+      ctx.beginPath();
+      ctx.arc(landmarks.nose.x * canvas.width, landmarks.nose.y * canvas.height, 15, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+
+    // Draw landmark points with matching colors
+    const getLandmarkColor = (key: string): string => {
+      if (!rulaScores) return '#22c55e';
+      
+      if (key === 'nose' || key === 'leftEar' || key === 'rightEar') {
+        return getScoreColor(rulaScores.neck, 6).replace('0.9', '1');
+      }
+      if (key === 'leftShoulder' || key === 'rightShoulder') {
+        return getScoreColor(rulaScores.upperArm, 6).replace('0.9', '1');
+      }
+      if (key === 'leftElbow' || key === 'rightElbow') {
+        return getScoreColor(rulaScores.lowerArm, 3).replace('0.9', '1');
+      }
+      if (key === 'leftWrist' || key === 'rightWrist') {
+        return getScoreColor(rulaScores.wrist, 4).replace('0.9', '1');
+      }
+      if (key === 'leftHip' || key === 'rightHip') {
+        return getScoreColor(rulaScores.trunk, 6).replace('0.9', '1');
+      }
+      return '#22c55e';
+    };
+
+    Object.entries(landmarks).forEach(([key, landmark]) => {
       if (landmark) {
+        ctx.fillStyle = getLandmarkColor(key);
         ctx.beginPath();
-        ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 5, 0, 2 * Math.PI);
+        ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 6, 0, 2 * Math.PI);
         ctx.fill();
+        
+        // Add glow effect
+        ctx.shadowColor = getLandmarkColor(key);
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
       }
     });
-  }, [landmarks]);
+  }, [landmarks, rulaScores]);
 
   return (
     <div className="glass-card overflow-hidden">
