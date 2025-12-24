@@ -99,53 +99,71 @@ function calculateAngle(
   return Math.acos(cosAngle) * (180 / Math.PI);
 }
 
-// Calculate angle from vertical, adjusted for camera side
-// cameraSide affects which direction is "forward"
-function calculateAngleFromVertical(
-  bottom: { x: number; y: number },
-  top: { x: number; y: number },
+// Calculate angle of a limb from DOWNWARD vertical (arm hanging = 0°, arm forward = positive)
+// In image coords: y increases downward, x increases rightward
+function calculateArmAngleFromDown(
+  shoulder: { x: number; y: number },
+  elbow: { x: number; y: number },
   cameraSide: CameraSide
 ): number {
-  const dx = top.x - bottom.x;
-  const dy = bottom.y - top.y; // y increases downward
+  // Vector from shoulder to elbow
+  let dx = elbow.x - shoulder.x;
+  const dy = elbow.y - shoulder.y; // Positive = elbow below shoulder
   
-  let angle = Math.atan2(dx, dy) * (180 / Math.PI);
-  
-  // Flip direction for left-side camera (driver faces right in image)
-  if (cameraSide === 'left') {
-    angle = -angle;
+  // For left-side camera, driver faces right, so forward is +x
+  // For right-side camera, driver faces left, so forward is -x
+  // Normalize so forward is always positive dx
+  if (cameraSide === 'right') {
+    dx = -dx;
   }
+  
+  // atan2(dx, dy): angle from downward vertical
+  // dx=0, dy>0 (arm hanging): 0°
+  // dx>0, dy=0 (arm horizontal forward): 90°
+  // dx>0, dy>0 (arm forward and down): 0-90°
+  const angle = Math.atan2(dx, dy) * (180 / Math.PI);
   
   return angle;
 }
 
-// Upper Arm Score (1-4) - Side view: shoulder to elbow angle from vertical
+// Upper Arm Score (1-4) - Angle from vertical (hanging down)
+// Good driving: arm extended forward 45-90° from vertical toward steering wheel
 function getUpperArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
   const { shoulder, elbow } = getPrimaryLandmarks(landmarks, cameraSide);
   
   if (!shoulder || !elbow) return 2;
   
-  const armAngle = Math.abs(calculateAngleFromVertical(shoulder, elbow, cameraSide));
+  const armAngle = calculateArmAngleFromDown(shoulder, elbow, cameraSide);
   
-  if (armAngle >= 20 && armAngle <= 50) return 1; // Ideal for driving
-  if (armAngle >= 10 && armAngle < 20) return 2; // Arms slightly vertical
-  if (armAngle > 50 && armAngle <= 70) return 2; // Slightly extended
-  if (armAngle > 70 && armAngle <= 90) return 3; // Too far forward
-  return 4; // Poor arm position
+  console.log('Upper arm angle from vertical:', armAngle.toFixed(1), '°');
+  
+  // Driving position: arms forward to steering wheel
+  // 45-90° forward from hanging position is ideal
+  if (armAngle >= 30 && armAngle <= 90) return 1; // Ideal driving position
+  if (armAngle >= 15 && armAngle < 30) return 2; // Arms a bit low
+  if (armAngle > 90 && armAngle <= 110) return 2; // Arms high but ok
+  if (armAngle >= 0 && armAngle < 15) return 3; // Arms hanging too low
+  if (armAngle > 110) return 3; // Arms too high
+  return 4; // Poor position (arms behind or very awkward)
 }
 
-// Lower Arm Score (1-3) - Elbow bend angle
+// Lower Arm Score (1-3) - Elbow bend angle (inner angle at elbow)
+// Good driving: elbow bent at 90-140° for comfortable wheel grip
 function getLowerArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
   const { shoulder, elbow, wrist } = getPrimaryLandmarks(landmarks, cameraSide);
   
   if (!shoulder || !elbow || !wrist) return 2;
   
+  // Calculate the inner angle at the elbow
   const elbowAngle = calculateAngle(shoulder, elbow, wrist);
   
-  if (elbowAngle >= 80 && elbowAngle <= 130) return 1; // Ideal bend
-  if (elbowAngle >= 60 && elbowAngle < 80) return 2; // Slightly acute
-  if (elbowAngle > 130 && elbowAngle <= 160) return 2; // Slightly extended
-  return 3; // Poor elbow position
+  console.log('Elbow bend angle:', elbowAngle.toFixed(1), '°');
+  
+  // For driving, a relaxed elbow bend of 90-140° is comfortable
+  if (elbowAngle >= 90 && elbowAngle <= 140) return 1; // Ideal
+  if (elbowAngle >= 70 && elbowAngle < 90) return 2; // Slightly tight bend
+  if (elbowAngle > 140 && elbowAngle <= 160) return 2; // Arms slightly straight
+  return 3; // Too bent or too straight
 }
 
 // Wrist Score (1-4) - Limited from side view
@@ -186,13 +204,16 @@ function getTrunkScore(landmarks: PostureLandmarks, cameraSide: CameraSide): num
   
   if (!shoulder || !hip) return 2;
   
-  const trunkAngle = calculateAngleFromVertical(hip, shoulder, cameraSide);
+  // Calculate trunk lean: positive = forward lean, negative = reclined
+  const trunkAngle = calculateArmAngleFromDown(hip, shoulder, cameraSide);
   
-  // Good driving: upright to slight recline
-  if (trunkAngle >= -25 && trunkAngle <= 15) return 1; // Ideal
-  if (trunkAngle > 15 && trunkAngle <= 30) return 2; // Slight forward lean
-  if (trunkAngle < -25 && trunkAngle >= -40) return 2; // Too reclined but ok
-  if (trunkAngle > 30 && trunkAngle <= 45) return 3; // Forward slouch
+  console.log('Trunk angle from vertical:', trunkAngle.toFixed(1), '°');
+  
+  // Good driving: slight recline (-20°) to slightly forward (15°)
+  if (trunkAngle >= -25 && trunkAngle <= 20) return 1; // Ideal
+  if (trunkAngle > 20 && trunkAngle <= 35) return 2; // Slight forward lean
+  if (trunkAngle < -25 && trunkAngle >= -40) return 2; // Reclined but ok
+  if (trunkAngle > 35 && trunkAngle <= 50) return 3; // Forward slouch
   return 4; // Poor trunk position
 }
 
