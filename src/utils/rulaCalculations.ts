@@ -48,7 +48,8 @@ function calculateVerticalAngle(
   return Math.atan2(dx, dy) * (180 / Math.PI);
 }
 
-// Upper Arm Score (1-6)
+// Upper Arm Score (1-6) - Calibrated for driving posture
+// Good driving: arms forward at ~45-70° to reach steering wheel
 function getUpperArmScore(landmarks: PostureLandmarks): number {
   if (!landmarks.leftShoulder || !landmarks.leftElbow || !landmarks.leftHip) return 3;
   
@@ -58,16 +59,17 @@ function getUpperArmScore(landmarks: PostureLandmarks): number {
     landmarks.leftElbow
   );
   
-  // Extension/flexion scoring
-  if (angle >= 160 && angle <= 200) return 1; // 20° extension to 20° flexion
-  if (angle >= 140 && angle < 160) return 2; // 20° to 45° flexion
-  if (angle >= 110 && angle < 140) return 3; // 45° to 90° flexion
-  if (angle < 110) return 4; // >90° flexion
-  if (angle > 200 && angle <= 220) return 2; // extension
-  return 4;
+  // Driving-specific scoring (arms extended forward to wheel)
+  if (angle >= 120 && angle <= 160) return 1; // Ideal driving position (45-70° forward)
+  if (angle >= 100 && angle < 120) return 2; // Slightly high arms
+  if (angle > 160 && angle <= 180) return 2; // Arms slightly low
+  if (angle >= 80 && angle < 100) return 3; // Arms too high
+  if (angle > 180 && angle <= 200) return 3; // Arms too low
+  return 4; // Poor arm position
 }
 
-// Lower Arm Score (1-3)
+// Lower Arm Score (1-3) - Calibrated for driving posture
+// Good driving: elbows bent ~90-120° for comfortable wheel grip
 function getLowerArmScore(landmarks: PostureLandmarks): number {
   if (!landmarks.leftShoulder || !landmarks.leftElbow || !landmarks.leftWrist) return 2;
   
@@ -77,8 +79,11 @@ function getLowerArmScore(landmarks: PostureLandmarks): number {
     landmarks.leftWrist
   );
   
-  if (angle >= 60 && angle <= 100) return 1; // 60-100° flexion
-  return 2; // <60° or >100°
+  // Driving-specific scoring (relaxed elbow bend for steering)
+  if (angle >= 90 && angle <= 140) return 1; // Ideal for steering wheel grip
+  if (angle >= 70 && angle < 90) return 2; // Slightly tight
+  if (angle > 140 && angle <= 160) return 2; // Arms slightly extended
+  return 3; // Poor elbow position
 }
 
 // Wrist Score (1-4)
@@ -94,7 +99,8 @@ function getWristScore(landmarks: PostureLandmarks): number {
   return 4; // Significant deviation
 }
 
-// Neck Score (1-6)
+// Neck Score (1-6) - Calibrated for driving posture
+// Good driving: slight forward tilt to watch road, head against headrest
 function getNeckScore(landmarks: PostureLandmarks): number {
   if (!landmarks.nose || !landmarks.leftShoulder || !landmarks.rightShoulder) return 3;
   
@@ -107,14 +113,16 @@ function getNeckScore(landmarks: PostureLandmarks): number {
   // Neck flexion angle
   const neckAngle = calculateVerticalAngle(shoulderMid, landmarks.nose);
   
-  if (neckAngle >= 0 && neckAngle <= 10) return 1; // 0-10° flexion
-  if (neckAngle > 10 && neckAngle <= 20) return 2; // 10-20° flexion
-  if (neckAngle > 20) return 3; // >20° flexion
-  if (neckAngle < 0 && neckAngle >= -10) return 2; // Slight extension
-  return 4; // Extension
+  // Driving-specific scoring (slight forward lean is natural)
+  if (neckAngle >= -5 && neckAngle <= 15) return 1; // Ideal driving neck position
+  if (neckAngle > 15 && neckAngle <= 25) return 2; // Slightly forward
+  if (neckAngle < -5 && neckAngle >= -15) return 2; // Slight recline (ok for driving)
+  if (neckAngle > 25 && neckAngle <= 35) return 3; // Too forward
+  return 4; // Poor neck position
 }
 
-// Trunk Score (1-6)
+// Trunk Score (1-6) - Calibrated for driving posture
+// Good driving: slight recline (~100-110° seat angle is ideal)
 function getTrunkScore(landmarks: PostureLandmarks): number {
   if (!landmarks.leftShoulder || !landmarks.rightShoulder || !landmarks.leftHip || !landmarks.rightHip) return 2;
   
@@ -128,12 +136,14 @@ function getTrunkScore(landmarks: PostureLandmarks): number {
     y: (landmarks.leftHip.y + landmarks.rightHip.y) / 2,
   };
   
-  const trunkAngle = Math.abs(calculateVerticalAngle(hipMid, shoulderMid));
+  const trunkAngle = calculateVerticalAngle(hipMid, shoulderMid);
   
-  if (trunkAngle <= 5) return 1; // Upright
-  if (trunkAngle <= 20) return 2; // 0-20° flexion
-  if (trunkAngle <= 60) return 3; // 20-60° flexion
-  return 4; // >60° flexion
+  // Driving-specific scoring (slight recline is optimal)
+  if (trunkAngle >= -15 && trunkAngle <= 15) return 1; // Good driving posture (slight recline ok)
+  if (trunkAngle > 15 && trunkAngle <= 25) return 2; // Slight forward lean
+  if (trunkAngle < -15 && trunkAngle >= -25) return 2; // Reclined (acceptable for driving)
+  if (trunkAngle > 25 && trunkAngle <= 40) return 3; // Leaning forward
+  return 4; // Poor trunk position
 }
 
 // RULA Table A (Wrist/Arm scores)
@@ -174,19 +184,22 @@ function getRecommendations(scores: Partial<RULAScores>): string[] {
   const recommendations: string[] = [];
   
   if ((scores.upperArm || 0) >= 3) {
-    recommendations.push("Lower your arms closer to your body");
+    recommendations.push("Adjust steering wheel height - arms should be relaxed at 9 and 3 position");
+  }
+  if ((scores.lowerArm || 0) >= 3) {
+    recommendations.push("Move seat closer/further - elbows should be slightly bent");
   }
   if ((scores.neck || 0) >= 3) {
-    recommendations.push("Straighten your neck - avoid forward head posture");
+    recommendations.push("Adjust headrest - keep head against it while looking at road");
   }
   if ((scores.trunk || 0) >= 3) {
-    recommendations.push("Sit upright - avoid slouching forward");
+    recommendations.push("Adjust seat recline - slight backward tilt reduces back strain");
   }
   if ((scores.wrist || 0) >= 3) {
-    recommendations.push("Keep wrists in neutral position on the wheel");
+    recommendations.push("Relax grip on wheel - wrists should be straight, not bent");
   }
   if (recommendations.length === 0) {
-    recommendations.push("Great posture! Keep it up!");
+    recommendations.push("Excellent driving posture! Stay safe on the road!");
   }
   
   return recommendations;
