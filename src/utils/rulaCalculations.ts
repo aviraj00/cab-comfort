@@ -26,123 +26,111 @@ export interface RULAScores {
   recommendations: string[];
 }
 
-// Calculate angle between three points
+// Calculate angle between three points (returns 0-180)
 function calculateAngle(
   p1: { x: number; y: number },
   p2: { x: number; y: number },
   p3: { x: number; y: number }
 ): number {
-  const radians = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
-  let angle = Math.abs(radians * (180 / Math.PI));
-  if (angle > 180) angle = 360 - angle;
-  return angle;
+  const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+  const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+  
+  const dot = v1.x * v2.x + v1.y * v2.y;
+  const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+  const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+  
+  if (mag1 === 0 || mag2 === 0) return 0;
+  
+  const cosAngle = Math.max(-1, Math.min(1, dot / (mag1 * mag2)));
+  return Math.acos(cosAngle) * (180 / Math.PI);
 }
 
-// Calculate the vertical angle of a limb
-function calculateVerticalAngle(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number }
+// Calculate angle from vertical (0° = straight up, positive = forward lean)
+// For side view: y increases downward in image coordinates
+function calculateAngleFromVertical(
+  bottom: { x: number; y: number },
+  top: { x: number; y: number }
 ): number {
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
+  const dx = top.x - bottom.x;
+  const dy = bottom.y - top.y; // Invert because y increases downward
   return Math.atan2(dx, dy) * (180 / Math.PI);
 }
 
-// Upper Arm Score (1-6) - Calibrated for driving posture
-// Good driving: arms forward at ~45-70° to reach steering wheel
+// Upper Arm Score (1-4) - Side view: shoulder to elbow angle from vertical
+// Good driving: arm extended forward ~20-45° from vertical to reach wheel
 function getUpperArmScore(landmarks: PostureLandmarks): number {
-  if (!landmarks.leftShoulder || !landmarks.leftElbow || !landmarks.leftHip) return 3;
+  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
+  const elbow = landmarks.leftElbow || landmarks.rightElbow;
   
-  const angle = calculateAngle(
-    landmarks.leftHip,
-    landmarks.leftShoulder,
-    landmarks.leftElbow
-  );
+  if (!shoulder || !elbow) return 2;
   
-  // Driving-specific scoring (arms extended forward to wheel)
-  if (angle >= 120 && angle <= 160) return 1; // Ideal driving position (45-70° forward)
-  if (angle >= 100 && angle < 120) return 2; // Slightly high arms
-  if (angle > 160 && angle <= 180) return 2; // Arms slightly low
-  if (angle >= 80 && angle < 100) return 3; // Arms too high
-  if (angle > 180 && angle <= 200) return 3; // Arms too low
-  return 4; // Poor arm position
+  const armAngle = Math.abs(calculateAngleFromVertical(shoulder, elbow));
+  
+  if (armAngle >= 20 && armAngle <= 45) return 1; // Ideal: 20-45° forward
+  if (armAngle >= 0 && armAngle < 20) return 2; // Arms too vertical
+  if (armAngle > 45 && armAngle <= 60) return 2; // Slightly extended
+  if (armAngle > 60 && armAngle <= 90) return 3; // Too far forward
+  return 4; // Arms in poor position
 }
 
-// Lower Arm Score (1-3) - Calibrated for driving posture
-// Good driving: elbows bent ~90-120° for comfortable wheel grip
+// Lower Arm Score (1-3) - Elbow bend angle
+// Good driving: elbow bent 80-120° for comfortable steering
 function getLowerArmScore(landmarks: PostureLandmarks): number {
-  if (!landmarks.leftShoulder || !landmarks.leftElbow || !landmarks.leftWrist) return 2;
+  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
+  const elbow = landmarks.leftElbow || landmarks.rightElbow;
+  const wrist = landmarks.leftWrist || landmarks.rightWrist;
   
-  const angle = calculateAngle(
-    landmarks.leftShoulder,
-    landmarks.leftElbow,
-    landmarks.leftWrist
-  );
+  if (!shoulder || !elbow || !wrist) return 2;
   
-  // Driving-specific scoring (relaxed elbow bend for steering)
-  if (angle >= 90 && angle <= 140) return 1; // Ideal for steering wheel grip
-  if (angle >= 70 && angle < 90) return 2; // Slightly tight
-  if (angle > 140 && angle <= 160) return 2; // Arms slightly extended
+  const elbowAngle = calculateAngle(shoulder, elbow, wrist);
+  
+  if (elbowAngle >= 80 && elbowAngle <= 120) return 1; // Ideal bend
+  if (elbowAngle >= 60 && elbowAngle < 80) return 2; // Slightly acute
+  if (elbowAngle > 120 && elbowAngle <= 150) return 2; // Slightly extended
   return 3; // Poor elbow position
 }
 
-// Wrist Score (1-4)
+// Wrist Score (1-4) - Limited from side view, default to neutral
 function getWristScore(landmarks: PostureLandmarks): number {
-  if (!landmarks.leftElbow || !landmarks.leftWrist) return 2;
-  
-  // Simplified wrist assessment based on wrist position relative to forearm
-  const verticalAngle = calculateVerticalAngle(landmarks.leftElbow, landmarks.leftWrist);
-  
-  if (Math.abs(verticalAngle) <= 15) return 1; // Neutral
-  if (Math.abs(verticalAngle) <= 30) return 2; // Slight deviation
-  if (Math.abs(verticalAngle) <= 45) return 3; // Moderate deviation
-  return 4; // Significant deviation
+  return 1; // Cannot accurately assess wrist from side view
 }
 
-// Neck Score (1-6) - Calibrated for driving posture
-// Good driving: slight forward tilt to watch road, head against headrest
+// Neck Score (1-4) - Side view: forward head posture check
+// Good driving: ear aligned with or behind shoulder (head against headrest)
 function getNeckScore(landmarks: PostureLandmarks): number {
-  if (!landmarks.nose || !landmarks.leftShoulder || !landmarks.rightShoulder) return 3;
+  const ear = landmarks.leftEar || landmarks.rightEar;
+  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
   
-  // Calculate midpoint of shoulders
-  const shoulderMid = {
-    x: (landmarks.leftShoulder.x + landmarks.rightShoulder.x) / 2,
-    y: (landmarks.leftShoulder.y + landmarks.rightShoulder.y) / 2,
-  };
+  if (!ear || !shoulder) return 2;
   
-  // Neck flexion angle
-  const neckAngle = calculateVerticalAngle(shoulderMid, landmarks.nose);
+  // Forward head: ear ahead of shoulder line
+  const headForward = shoulder.x - ear.x; // Positive = head forward
+  const verticalDist = Math.abs(shoulder.y - ear.y);
   
-  // Driving-specific scoring (slight forward lean is natural)
-  if (neckAngle >= -5 && neckAngle <= 15) return 1; // Ideal driving neck position
-  if (neckAngle > 15 && neckAngle <= 25) return 2; // Slightly forward
-  if (neckAngle < -5 && neckAngle >= -15) return 2; // Slight recline (ok for driving)
-  if (neckAngle > 25 && neckAngle <= 35) return 3; // Too forward
-  return 4; // Poor neck position
+  if (verticalDist === 0) return 2;
+  
+  const forwardRatio = headForward / verticalDist;
+  
+  if (forwardRatio <= 0.1) return 1; // Excellent - ear aligned/behind shoulder
+  if (forwardRatio <= 0.25) return 2; // Slight forward head
+  if (forwardRatio <= 0.4) return 3; // Moderate forward head
+  return 4; // Severe forward head posture
 }
 
-// Trunk Score (1-6) - Calibrated for driving posture
-// Good driving: slight recline (~100-110° seat angle is ideal)
+// Trunk Score (1-4) - Side view: spine angle from vertical
+// Good driving: upright to slight recline (-5 to 15° from vertical)
 function getTrunkScore(landmarks: PostureLandmarks): number {
-  if (!landmarks.leftShoulder || !landmarks.rightShoulder || !landmarks.leftHip || !landmarks.rightHip) return 2;
+  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
+  const hip = landmarks.leftHip || landmarks.rightHip;
   
-  const shoulderMid = {
-    x: (landmarks.leftShoulder.x + landmarks.rightShoulder.x) / 2,
-    y: (landmarks.leftShoulder.y + landmarks.rightShoulder.y) / 2,
-  };
+  if (!shoulder || !hip) return 2;
   
-  const hipMid = {
-    x: (landmarks.leftHip.x + landmarks.rightHip.x) / 2,
-    y: (landmarks.leftHip.y + landmarks.rightHip.y) / 2,
-  };
+  const trunkAngle = calculateAngleFromVertical(hip, shoulder);
   
-  const trunkAngle = calculateVerticalAngle(hipMid, shoulderMid);
-  
-  // Driving-specific scoring (slight recline is optimal)
-  if (trunkAngle >= -15 && trunkAngle <= 15) return 1; // Good driving posture (slight recline ok)
+  if (trunkAngle >= -20 && trunkAngle <= 15) return 1; // Ideal: slight recline to upright
   if (trunkAngle > 15 && trunkAngle <= 25) return 2; // Slight forward lean
-  if (trunkAngle < -15 && trunkAngle >= -25) return 2; // Reclined (acceptable for driving)
-  if (trunkAngle > 25 && trunkAngle <= 40) return 3; // Leaning forward
+  if (trunkAngle < -20 && trunkAngle >= -35) return 2; // Too reclined but ok
+  if (trunkAngle > 25 && trunkAngle <= 40) return 3; // Forward slouch
   return 4; // Poor trunk position
 }
 
