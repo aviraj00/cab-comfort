@@ -1,5 +1,6 @@
 // RULA (Rapid Upper Limb Assessment) Score Calculation
 // Based on McAtamney & Corlett (1993)
+// Adapted for side-view camera (left or right of driver)
 
 export interface PostureLandmarks {
   nose?: { x: number; y: number; z?: number };
@@ -24,6 +25,59 @@ export interface RULAScores {
   finalScore: number;
   risk: 'low' | 'medium' | 'high' | 'very-high';
   recommendations: string[];
+  cameraSide: 'left' | 'right' | 'unknown';
+}
+
+export type CameraSide = 'left' | 'right' | 'unknown';
+
+// Auto-detect camera side based on which body parts are more visible
+// Camera on RIGHT of driver: sees driver's LEFT side (left landmarks visible, facing left in image)
+// Camera on LEFT of driver: sees driver's RIGHT side (right landmarks visible, facing right in image)
+function detectCameraSide(landmarks: PostureLandmarks): CameraSide {
+  const leftScore = [
+    landmarks.leftShoulder,
+    landmarks.leftElbow,
+    landmarks.leftWrist,
+    landmarks.leftHip,
+    landmarks.leftEar,
+  ].filter(Boolean).length;
+  
+  const rightScore = [
+    landmarks.rightShoulder,
+    landmarks.rightElbow,
+    landmarks.rightWrist,
+    landmarks.rightHip,
+    landmarks.rightEar,
+  ].filter(Boolean).length;
+  
+  // If we see more left landmarks, camera is on right side of driver
+  // If we see more right landmarks, camera is on left side of driver
+  if (leftScore > rightScore) return 'right';
+  if (rightScore > leftScore) return 'left';
+  
+  // If equal, check nose position relative to shoulders for facing direction
+  if (landmarks.nose && landmarks.leftShoulder && landmarks.rightShoulder) {
+    const shoulderMidX = (landmarks.leftShoulder.x + landmarks.rightShoulder.x) / 2;
+    // If nose is left of shoulder center, likely facing left (camera on right)
+    if (landmarks.nose.x < shoulderMidX) return 'right';
+    return 'left';
+  }
+  
+  return 'unknown';
+}
+
+// Get primary landmarks based on camera side
+function getPrimaryLandmarks(landmarks: PostureLandmarks, cameraSide: CameraSide) {
+  // Camera on right sees left side, camera on left sees right side
+  const useLeft = cameraSide === 'right' || cameraSide === 'unknown';
+  
+  return {
+    shoulder: useLeft ? (landmarks.leftShoulder || landmarks.rightShoulder) : (landmarks.rightShoulder || landmarks.leftShoulder),
+    elbow: useLeft ? (landmarks.leftElbow || landmarks.rightElbow) : (landmarks.rightElbow || landmarks.leftElbow),
+    wrist: useLeft ? (landmarks.leftWrist || landmarks.rightWrist) : (landmarks.rightWrist || landmarks.leftWrist),
+    hip: useLeft ? (landmarks.leftHip || landmarks.rightHip) : (landmarks.rightHip || landmarks.leftHip),
+    ear: useLeft ? (landmarks.leftEar || landmarks.rightEar) : (landmarks.rightEar || landmarks.leftEar),
+  };
 }
 
 // Calculate angle between three points (returns 0-180)
@@ -45,92 +99,100 @@ function calculateAngle(
   return Math.acos(cosAngle) * (180 / Math.PI);
 }
 
-// Calculate angle from vertical (0° = straight up, positive = forward lean)
-// For side view: y increases downward in image coordinates
+// Calculate angle from vertical, adjusted for camera side
+// cameraSide affects which direction is "forward"
 function calculateAngleFromVertical(
   bottom: { x: number; y: number },
-  top: { x: number; y: number }
+  top: { x: number; y: number },
+  cameraSide: CameraSide
 ): number {
   const dx = top.x - bottom.x;
-  const dy = bottom.y - top.y; // Invert because y increases downward
-  return Math.atan2(dx, dy) * (180 / Math.PI);
+  const dy = bottom.y - top.y; // y increases downward
+  
+  let angle = Math.atan2(dx, dy) * (180 / Math.PI);
+  
+  // Flip direction for left-side camera (driver faces right in image)
+  if (cameraSide === 'left') {
+    angle = -angle;
+  }
+  
+  return angle;
 }
 
 // Upper Arm Score (1-4) - Side view: shoulder to elbow angle from vertical
-// Good driving: arm extended forward ~20-45° from vertical to reach wheel
-function getUpperArmScore(landmarks: PostureLandmarks): number {
-  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
-  const elbow = landmarks.leftElbow || landmarks.rightElbow;
+function getUpperArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
+  const { shoulder, elbow } = getPrimaryLandmarks(landmarks, cameraSide);
   
   if (!shoulder || !elbow) return 2;
   
-  const armAngle = Math.abs(calculateAngleFromVertical(shoulder, elbow));
+  const armAngle = Math.abs(calculateAngleFromVertical(shoulder, elbow, cameraSide));
   
-  if (armAngle >= 20 && armAngle <= 45) return 1; // Ideal: 20-45° forward
-  if (armAngle >= 0 && armAngle < 20) return 2; // Arms too vertical
-  if (armAngle > 45 && armAngle <= 60) return 2; // Slightly extended
-  if (armAngle > 60 && armAngle <= 90) return 3; // Too far forward
-  return 4; // Arms in poor position
+  if (armAngle >= 20 && armAngle <= 50) return 1; // Ideal for driving
+  if (armAngle >= 10 && armAngle < 20) return 2; // Arms slightly vertical
+  if (armAngle > 50 && armAngle <= 70) return 2; // Slightly extended
+  if (armAngle > 70 && armAngle <= 90) return 3; // Too far forward
+  return 4; // Poor arm position
 }
 
 // Lower Arm Score (1-3) - Elbow bend angle
-// Good driving: elbow bent 80-120° for comfortable steering
-function getLowerArmScore(landmarks: PostureLandmarks): number {
-  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
-  const elbow = landmarks.leftElbow || landmarks.rightElbow;
-  const wrist = landmarks.leftWrist || landmarks.rightWrist;
+function getLowerArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
+  const { shoulder, elbow, wrist } = getPrimaryLandmarks(landmarks, cameraSide);
   
   if (!shoulder || !elbow || !wrist) return 2;
   
   const elbowAngle = calculateAngle(shoulder, elbow, wrist);
   
-  if (elbowAngle >= 80 && elbowAngle <= 120) return 1; // Ideal bend
+  if (elbowAngle >= 80 && elbowAngle <= 130) return 1; // Ideal bend
   if (elbowAngle >= 60 && elbowAngle < 80) return 2; // Slightly acute
-  if (elbowAngle > 120 && elbowAngle <= 150) return 2; // Slightly extended
+  if (elbowAngle > 130 && elbowAngle <= 160) return 2; // Slightly extended
   return 3; // Poor elbow position
 }
 
-// Wrist Score (1-4) - Limited from side view, default to neutral
-function getWristScore(landmarks: PostureLandmarks): number {
+// Wrist Score (1-4) - Limited from side view
+function getWristScore(): number {
   return 1; // Cannot accurately assess wrist from side view
 }
 
-// Neck Score (1-4) - Side view: forward head posture check
-// Good driving: ear aligned with or behind shoulder (head against headrest)
-function getNeckScore(landmarks: PostureLandmarks): number {
-  const ear = landmarks.leftEar || landmarks.rightEar;
-  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
+// Neck Score (1-4) - Forward head posture check
+function getNeckScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
+  const { ear, shoulder } = getPrimaryLandmarks(landmarks, cameraSide);
   
   if (!ear || !shoulder) return 2;
   
-  // Forward head: ear ahead of shoulder line
-  const headForward = shoulder.x - ear.x; // Positive = head forward
   const verticalDist = Math.abs(shoulder.y - ear.y);
-  
   if (verticalDist === 0) return 2;
+  
+  // Calculate forward head displacement
+  // For right-side camera: ear.x < shoulder.x = forward head (bad)
+  // For left-side camera: ear.x > shoulder.x = forward head (bad)
+  let headForward: number;
+  if (cameraSide === 'left') {
+    headForward = ear.x - shoulder.x; // Positive = forward
+  } else {
+    headForward = shoulder.x - ear.x; // Positive = forward
+  }
   
   const forwardRatio = headForward / verticalDist;
   
-  if (forwardRatio <= 0.1) return 1; // Excellent - ear aligned/behind shoulder
-  if (forwardRatio <= 0.25) return 2; // Slight forward head
-  if (forwardRatio <= 0.4) return 3; // Moderate forward head
+  if (forwardRatio <= 0.15) return 1; // Excellent - head aligned/back
+  if (forwardRatio <= 0.3) return 2; // Slight forward head
+  if (forwardRatio <= 0.5) return 3; // Moderate forward head
   return 4; // Severe forward head posture
 }
 
-// Trunk Score (1-4) - Side view: spine angle from vertical
-// Good driving: upright to slight recline (-5 to 15° from vertical)
-function getTrunkScore(landmarks: PostureLandmarks): number {
-  const shoulder = landmarks.leftShoulder || landmarks.rightShoulder;
-  const hip = landmarks.leftHip || landmarks.rightHip;
+// Trunk Score (1-4) - Spine angle from vertical
+function getTrunkScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
+  const { shoulder, hip } = getPrimaryLandmarks(landmarks, cameraSide);
   
   if (!shoulder || !hip) return 2;
   
-  const trunkAngle = calculateAngleFromVertical(hip, shoulder);
+  const trunkAngle = calculateAngleFromVertical(hip, shoulder, cameraSide);
   
-  if (trunkAngle >= -20 && trunkAngle <= 15) return 1; // Ideal: slight recline to upright
-  if (trunkAngle > 15 && trunkAngle <= 25) return 2; // Slight forward lean
-  if (trunkAngle < -20 && trunkAngle >= -35) return 2; // Too reclined but ok
-  if (trunkAngle > 25 && trunkAngle <= 40) return 3; // Forward slouch
+  // Good driving: upright to slight recline
+  if (trunkAngle >= -25 && trunkAngle <= 15) return 1; // Ideal
+  if (trunkAngle > 15 && trunkAngle <= 30) return 2; // Slight forward lean
+  if (trunkAngle < -25 && trunkAngle >= -40) return 2; // Too reclined but ok
+  if (trunkAngle > 30 && trunkAngle <= 45) return 3; // Forward slouch
   return 4; // Poor trunk position
 }
 
@@ -194,11 +256,14 @@ function getRecommendations(scores: Partial<RULAScores>): string[] {
 }
 
 export function calculateRULAScore(landmarks: PostureLandmarks): RULAScores {
-  const upperArm = getUpperArmScore(landmarks);
-  const lowerArm = getLowerArmScore(landmarks);
-  const wrist = getWristScore(landmarks);
-  const neck = getNeckScore(landmarks);
-  const trunk = getTrunkScore(landmarks);
+  // Auto-detect camera side
+  const cameraSide = detectCameraSide(landmarks);
+  
+  const upperArm = getUpperArmScore(landmarks, cameraSide);
+  const lowerArm = getLowerArmScore(landmarks, cameraSide);
+  const wrist = getWristScore();
+  const neck = getNeckScore(landmarks, cameraSide);
+  const trunk = getTrunkScore(landmarks, cameraSide);
   
   // Get Table A score (wrist/arm)
   const wristIdx = Math.min(wrist - 1, 3);
@@ -232,5 +297,6 @@ export function calculateRULAScore(landmarks: PostureLandmarks): RULAScores {
     finalScore,
     risk,
     recommendations,
+    cameraSide,
   };
 }
