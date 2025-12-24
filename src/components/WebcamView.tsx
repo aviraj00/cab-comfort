@@ -289,6 +289,15 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, ru
           )}
         </AnimatePresence>
 
+        {/* Camera side indicator */}
+        {cameraActive && rulaScores && rulaScores.cameraSide !== 'unknown' && (
+          <div className="absolute top-4 right-4 bg-card/80 backdrop-blur-sm px-3 py-1.5 rounded-full">
+            <span className="text-xs text-muted-foreground">
+              Camera: {rulaScores.cameraSide === 'left' ? 'Left side' : 'Right side'}
+            </span>
+          </div>
+        )}
+
         {/* Status indicator */}
         {cameraActive && (
           <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-card/80 backdrop-blur-sm px-3 py-1.5 rounded-full">
