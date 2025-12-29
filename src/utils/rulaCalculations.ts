@@ -148,22 +148,29 @@ function getUpperArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): 
 }
 
 // Lower Arm Score (1-3) - Elbow bend angle (inner angle at elbow)
-// Good driving: elbow bent at 60-120° for comfortable wheel grip
+// Good driving: elbow bent for comfortable wheel grip
 function getLowerArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
   const { shoulder, elbow, wrist } = getPrimaryLandmarks(landmarks, cameraSide);
   
   if (!shoulder || !elbow || !wrist) return 2;
   
-  // Calculate the inner angle at the elbow
-  const elbowAngle = calculateAngle(shoulder, elbow, wrist);
+  // Calculate the angle at the elbow (angle between upper arm and forearm)
+  const rawAngle = calculateAngle(shoulder, elbow, wrist);
   
-  console.log('Elbow bend angle:', elbowAngle.toFixed(1), '°');
+  // The angle can be measured as either the inner bend or outer angle
+  // Convert to "bend amount" - 180° = straight arm, 90° = right angle bend
+  // We want to score based on how much the arm is bent from straight
+  const bendFromStraight = 180 - rawAngle;
   
-  // For driving, elbow typically bent 60-120° when gripping steering wheel
-  if (elbowAngle >= 60 && elbowAngle <= 120) return 1; // Ideal
-  if (elbowAngle >= 45 && elbowAngle < 60) return 2; // Slightly tight bend
-  if (elbowAngle > 120 && elbowAngle <= 150) return 2; // Arms slightly straight
-  return 3; // Too bent or too straight
+  console.log('Elbow bend angle:', rawAngle.toFixed(1), '° (bend from straight:', bendFromStraight.toFixed(1), '°)');
+  
+  // For driving with hands on wheel:
+  // Raw angle 120-170° (bend from straight: 10-60°) is typical - arms fairly extended
+  // Raw angle 90-120° (bend from straight: 60-90°) is also comfortable
+  if (rawAngle >= 90 && rawAngle <= 170) return 1; // Ideal - comfortable driving range
+  if (rawAngle >= 70 && rawAngle < 90) return 2; // Arms quite bent
+  if (rawAngle > 170 && rawAngle <= 180) return 2; // Arms very straight but ok
+  return 3; // Too bent or awkward position
 }
 
 // Wrist Score (1-4) - Limited from side view
