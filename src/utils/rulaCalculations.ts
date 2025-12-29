@@ -204,12 +204,27 @@ function getTrunkScore(landmarks: PostureLandmarks, cameraSide: CameraSide): num
   
   if (!shoulder || !hip) return 2;
   
-  // Calculate trunk lean: positive = forward lean, negative = reclined
-  const trunkAngle = calculateArmAngleFromDown(hip, shoulder, cameraSide);
+  // Calculate trunk lean from vertical
+  // Vector from hip (lower) to shoulder (upper)
+  let dx = shoulder.x - hip.x;
+  const dy = shoulder.y - hip.y; // Negative when shoulder is above hip (normal)
+  
+  // Normalize direction based on camera side
+  // Left-side camera: driver faces right, forward lean = shoulder.x > hip.x = positive dx
+  // Right-side camera: driver faces left, forward lean = shoulder.x < hip.x = negative dx
+  if (cameraSide === 'right') {
+    dx = -dx;
+  }
+  
+  // Calculate angle from UPWARD vertical
+  // For upright sitting: dx ≈ 0, dy < 0 → angle ≈ 0
+  // For forward lean: dx > 0 → positive angle
+  // For recline: dx < 0 → negative angle
+  const trunkAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
   
   console.log('Trunk angle from vertical:', trunkAngle.toFixed(1), '°');
   
-  // Good driving: slight recline (-20°) to slightly forward (15°)
+  // Good driving: slight recline (-25°) to slightly forward (20°)
   if (trunkAngle >= -25 && trunkAngle <= 20) return 1; // Ideal
   if (trunkAngle > 20 && trunkAngle <= 35) return 2; // Slight forward lean
   if (trunkAngle < -25 && trunkAngle >= -40) return 2; // Reclined but ok
