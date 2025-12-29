@@ -148,7 +148,7 @@ function getUpperArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): 
 }
 
 // Lower Arm Score (1-3) - Elbow bend angle (inner angle at elbow)
-// Good driving: elbow bent at 90-140° for comfortable wheel grip
+// Good driving: elbow bent at 60-120° for comfortable wheel grip
 function getLowerArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): number {
   const { shoulder, elbow, wrist } = getPrimaryLandmarks(landmarks, cameraSide);
   
@@ -159,10 +159,10 @@ function getLowerArmScore(landmarks: PostureLandmarks, cameraSide: CameraSide): 
   
   console.log('Elbow bend angle:', elbowAngle.toFixed(1), '°');
   
-  // For driving, a relaxed elbow bend of 90-140° is comfortable
-  if (elbowAngle >= 90 && elbowAngle <= 140) return 1; // Ideal
-  if (elbowAngle >= 70 && elbowAngle < 90) return 2; // Slightly tight bend
-  if (elbowAngle > 140 && elbowAngle <= 160) return 2; // Arms slightly straight
+  // For driving, elbow typically bent 60-120° when gripping steering wheel
+  if (elbowAngle >= 60 && elbowAngle <= 120) return 1; // Ideal
+  if (elbowAngle >= 45 && elbowAngle < 60) return 2; // Slightly tight bend
+  if (elbowAngle > 120 && elbowAngle <= 150) return 2; // Arms slightly straight
   return 3; // Too bent or too straight
 }
 
