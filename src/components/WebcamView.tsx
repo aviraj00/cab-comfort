@@ -10,6 +10,7 @@ interface WebcamViewProps {
   rulaScores: RULAScores | null;
   landmarks: PostureLandmarks | null;
   isDetecting: boolean;
+  fullscreen?: boolean;
 }
 
 // MediaPipe pose connections for skeleton drawing
@@ -31,7 +32,7 @@ const riskConfig = {
   'very-high': { label: 'Critical', color: 'text-destructive', bgColor: 'bg-destructive/20', borderColor: 'border-destructive' },
 };
 
-export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, rulaScores }: WebcamViewProps) {
+export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, rulaScores, fullscreen = false }: WebcamViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -206,8 +207,8 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, ru
   }, [landmarks, rulaScores]);
 
   return (
-    <div className="glass-card overflow-hidden">
-      <div className="relative aspect-video bg-background">
+    <div className={fullscreen ? "w-full h-full" : "glass-card overflow-hidden"}>
+      <div className={`relative bg-background ${fullscreen ? "w-full h-full" : "aspect-video"}`}>
         {!cameraActive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
             {cameraError ? (

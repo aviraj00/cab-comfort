@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, XCircle, Activity } from 'lucide-react';
 
 interface RULAScoreDisplayProps {
   scores: RULAScores | null;
+  compact?: boolean;
 }
 
 const riskConfig = {
@@ -67,12 +68,12 @@ const ScoreBar = ({ label, score, maxScore }: { label: string; score: number; ma
   );
 };
 
-export function RULAScoreDisplay({ scores }: RULAScoreDisplayProps) {
+export function RULAScoreDisplay({ scores, compact = false }: RULAScoreDisplayProps) {
   if (!scores) {
     return (
-      <div className="glass-card p-6 space-y-4">
+      <div className={`glass-card ${compact ? 'p-3' : 'p-6'} space-y-4`}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-muted animate-pulse" />
+          <div className={`${compact ? 'w-8 h-8' : 'w-10 h-10'} rounded-full bg-muted animate-pulse`} />
           <div className="space-y-2 flex-1">
             <div className="h-4 bg-muted rounded animate-pulse w-24" />
             <div className="h-3 bg-muted rounded animate-pulse w-16" />
@@ -84,6 +85,42 @@ export function RULAScoreDisplay({ scores }: RULAScoreDisplayProps) {
 
   const config = riskConfig[scores.risk];
   const Icon = config.icon;
+
+  // Compact mode for overlay
+  if (compact) {
+    return (
+      <motion.div
+        className={`glass-card p-4 ${config.glowClass}`}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="flex items-center gap-3">
+          <motion.div
+            className={`w-12 h-12 rounded-xl ${config.bgColor} ${config.borderColor} border flex items-center justify-center`}
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            <Icon className={`w-6 h-6 ${config.color}`} />
+          </motion.div>
+          <div>
+            <div className="flex items-baseline gap-1">
+              <motion.span
+                key={scores.finalScore}
+                className={`text-3xl font-bold font-mono ${config.color}`}
+                initial={{ scale: 1.2, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+              >
+                {scores.finalScore}
+              </motion.span>
+              <span className="text-muted-foreground text-sm">/7</span>
+            </div>
+            <p className={`text-sm font-medium ${config.color}`}>{config.label}</p>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
