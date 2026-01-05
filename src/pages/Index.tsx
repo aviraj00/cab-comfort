@@ -11,15 +11,18 @@ const Index = () => {
   }, [startDetection]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 gap-4">
+    <div className="fixed inset-0 bg-black">
       <WebcamView
         onVideoReady={handleVideoReady}
         isLoading={isLoading}
         landmarks={landmarks}
         isDetecting={isDetecting}
         rulaScores={rulaScores}
+        fullscreen
       />
-      <RULAScoreDisplay scores={rulaScores} />
+      <div className="absolute top-4 right-4 z-20">
+        <RULAScoreDisplay scores={rulaScores} compact />
+      </div>
     </div>
   );
 };
