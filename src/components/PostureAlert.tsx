@@ -47,7 +47,7 @@ export function PostureAlert({ scores }: PostureAlertProps) {
     if (!scores) return;
     
     const now = Date.now();
-    const shouldAlert = scores.risk === 'high' || scores.risk === 'very-high';
+    const shouldAlert = scores.finalScore >= 4 && scores.finalScore <= 7;
     
     if (shouldAlert && now - lastAlertTimeRef.current > 5000) {
       setShowAlert(true);
@@ -58,24 +58,26 @@ export function PostureAlert({ scores }: PostureAlertProps) {
     }
   }, [scores, soundEnabled]);
 
-  const alertConfig = {
-    'high': {
-      title: 'Posture Warning',
-      message: 'Your posture needs correction. Please adjust your sitting position.',
-      bgClass: 'bg-warning/20 border-warning/40',
-      textClass: 'text-warning',
-    },
-    'very-high': {
-      title: 'Critical Posture Alert',
-      message: 'Immediate posture correction required to prevent strain!',
-      bgClass: 'bg-destructive/20 border-destructive/40',
-      textClass: 'text-destructive',
-    },
+  const getAlertConfig = (score: number) => {
+    if (score >= 6) {
+      return {
+        title: 'Critical Posture Alert',
+        message: 'Immediate posture correction required to prevent strain!',
+        bgClass: 'bg-destructive/20 border-destructive/40',
+        textClass: 'text-destructive',
+      };
+    } else if (score >= 4) {
+      return {
+        title: 'Posture Warning',
+        message: 'Your posture needs correction. Please adjust your sitting position.',
+        bgClass: 'bg-warning/20 border-warning/40',
+        textClass: 'text-warning',
+      };
+    }
+    return null;
   };
 
-  const config = scores?.risk && (scores.risk === 'high' || scores.risk === 'very-high')
-    ? alertConfig[scores.risk]
-    : null;
+  const config = scores ? getAlertConfig(scores.finalScore) : null;
 
   return (
     <>
