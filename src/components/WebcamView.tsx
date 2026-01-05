@@ -261,34 +261,6 @@ export function WebcamView({ onVideoReady, isLoading, landmarks, isDetecting, ru
           </div>
         )}
 
-        {/* Score overlay */}
-        <AnimatePresence>
-          {cameraActive && rulaScores && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="absolute top-4 left-4 z-10"
-            >
-              <div className={`${riskConfig[rulaScores.risk].bgColor} ${riskConfig[rulaScores.risk].borderColor} border-2 backdrop-blur-md rounded-2xl p-4 min-w-[120px]`}>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground mb-1">RULA Score</p>
-                  <motion.p
-                    key={rulaScores.finalScore}
-                    initial={{ scale: 1.3 }}
-                    animate={{ scale: 1 }}
-                    className={`text-4xl font-bold font-mono ${riskConfig[rulaScores.risk].color}`}
-                  >
-                    {rulaScores.finalScore}
-                  </motion.p>
-                  <p className={`text-sm font-medium ${riskConfig[rulaScores.risk].color}`}>
-                    {riskConfig[rulaScores.risk].label}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Camera side indicator */}
         {cameraActive && rulaScores && rulaScores.cameraSide !== 'unknown' && (
