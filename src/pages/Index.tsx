@@ -9,7 +9,7 @@ import { usePostureDataCollection } from '@/hooks/usePostureDataCollection';
 
 const Index = () => {
   const { isLoading, rulaScores, landmarks, startDetection, isDetecting } = usePoseDetection();
-  const { dataCount, isCollecting, exportToCSV, clearData, toggleCollection } = usePostureDataCollection(rulaScores, 5000);
+  const { dataCount, isCollecting, exportToCSV, clearData, toggleCollection } = usePostureDataCollection(rulaScores, 3000);
 
   const handleVideoReady = useCallback((video: HTMLVideoElement) => {
     startDetection(video);
