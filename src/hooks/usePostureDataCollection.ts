@@ -29,11 +29,10 @@ export function usePostureDataCollection(scores: RULAScores | null, intervalMs: 
         neck: scores.neck,
         trunk: scores.trunk,
         upperArm: scores.upperArm,
-        lowerArm: scores.lowerArm,
+        elbowAngle: scores.lowerArm,
         wrist: scores.wrist,
         finalScore: scores.finalScore,
         risk: scores.risk,
-        cameraSide: scores.cameraSide,
       };
 
       setDataPoints(prev => [...prev, dataPoint]);
