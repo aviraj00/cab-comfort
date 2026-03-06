@@ -74,7 +74,7 @@ export function PostureDetailsPanel({ scores }: PostureDetailsPanelProps) {
               <ScoreItem label="Neck" score={scores.neck} maxScore={6} />
               <ScoreItem label="Trunk" score={scores.trunk} maxScore={6} />
               <ScoreItem label="Upper Arm" score={scores.upperArm} maxScore={6} />
-              <ScoreItem label="Lower Arm" score={scores.lowerArm} maxScore={3} />
+              <ScoreItem label="Elbow Angle" score={scores.lowerArm} maxScore={3} />
               <ScoreItem label="Wrist" score={scores.wrist} maxScore={4} />
             </div>
 
