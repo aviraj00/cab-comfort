@@ -6,11 +6,10 @@ export interface PostureDataPoint {
   neck: number;
   trunk: number;
   upperArm: number;
-  lowerArm: number;
+  elbowAngle: number;
   wrist: number;
   finalScore: number;
   risk: string;
-  cameraSide: string;
 }
 
 export function usePostureDataCollection(scores: RULAScores | null, intervalMs: number = 5000) {
@@ -30,11 +29,10 @@ export function usePostureDataCollection(scores: RULAScores | null, intervalMs: 
         neck: scores.neck,
         trunk: scores.trunk,
         upperArm: scores.upperArm,
-        lowerArm: scores.lowerArm,
+        elbowAngle: scores.lowerArm,
         wrist: scores.wrist,
         finalScore: scores.finalScore,
         risk: scores.risk,
-        cameraSide: scores.cameraSide,
       };
 
       setDataPoints(prev => [...prev, dataPoint]);
@@ -48,7 +46,7 @@ export function usePostureDataCollection(scores: RULAScores | null, intervalMs: 
       return;
     }
 
-    const headers = ['Timestamp', 'Neck', 'Trunk', 'Upper Arm', 'Lower Arm', 'Wrist', 'Final Score', 'Risk Level', 'Camera Side'];
+    const headers = ['Timestamp', 'Neck', 'Trunk', 'Upper Arm', 'Elbow Angle', 'Wrist', 'Final Score', 'Risk Level'];
     const csvRows = [
       headers.join(','),
       ...dataPoints.map(point => [
@@ -56,11 +54,10 @@ export function usePostureDataCollection(scores: RULAScores | null, intervalMs: 
         point.neck,
         point.trunk,
         point.upperArm,
-        point.lowerArm,
+        point.elbowAngle,
         point.wrist,
         point.finalScore,
         point.risk,
-        point.cameraSide,
       ].join(','))
     ];
 
