@@ -6,11 +6,10 @@ export interface PostureDataPoint {
   neck: number;
   trunk: number;
   upperArm: number;
-  lowerArm: number;
+  elbowAngle: number;
   wrist: number;
   finalScore: number;
   risk: string;
-  cameraSide: string;
 }
 
 export function usePostureDataCollection(scores: RULAScores | null, intervalMs: number = 5000) {
