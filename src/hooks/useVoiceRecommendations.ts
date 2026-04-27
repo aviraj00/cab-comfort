@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { RULAScores } from '@/utils/rulaCalculations';
 
-const PART_COOLDOWN_MS = 20000; // per-part cooldown
-const GAP_BETWEEN_PHRASES_MS = 1200; // pause between body-part messages
-const CHECK_INTERVAL_MS = 2000; // how often we look for new things to say
+// Normal mode timings
+const NORMAL_PART_COOLDOWN_MS = 20000;
+const NORMAL_GAP_BETWEEN_PHRASES_MS = 1200;
+const NORMAL_VOLUME = 1;
+
+// Quiet mode timings (softer + tighter spacing so alerts feel more ambient)
+const QUIET_PART_COOLDOWN_MS = 8000;
+const QUIET_GAP_BETWEEN_PHRASES_MS = 400;
+const QUIET_VOLUME = 0.35;
+
+const CHECK_INTERVAL_MS = 2000;
 
 type PartKey = 'neck' | 'trunk' | 'upperArm' | 'lowerArm' | 'wrist';
 
@@ -25,7 +33,11 @@ const MESSAGES: Record<PartKey, string> = {
 
 const PREFIX = { warn: 'Posture warning. ', critical: 'Critical posture alert. ' };
 
-export function useVoiceRecommendations(scores: RULAScores | null, enabled: boolean) {
+export function useVoiceRecommendations(
+  scores: RULAScores | null,
+  enabled: boolean,
+  quiet: boolean = false,
+) {
   const [supported, setSupported] = useState(false);
   const lastSpokenAtRef = useRef<Record<PartKey, number>>({
     neck: 0, trunk: 0, upperArm: 0, lowerArm: 0, wrist: 0,
@@ -33,10 +45,12 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
   const queueRef = useRef<string[]>([]);
   const speakingRef = useRef(false);
   const scoresRef = useRef<RULAScores | null>(null);
+  const quietRef = useRef(quiet);
+
+  useEffect(() => { quietRef.current = quiet; }, [quiet]);
 
   useEffect(() => {
     setSupported(typeof window !== 'undefined' && 'speechSynthesis' in window);
-    // Voices load async in Chrome — trigger a load and re-render when ready
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.getVoices();
       const handler = () => window.speechSynthesis.getVoices();
@@ -52,7 +66,6 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
     if (!voices.length) return null;
     const en = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
     if (!en.length) return null;
-    // Preferred high-quality voices across browsers/OSes (ordered)
     const preferred = [
       'Google UK English Female',
       'Google US English',
@@ -69,10 +82,8 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
       const m = en.find(v => v.name === name);
       if (m) return m;
     }
-    // Prefer "natural"/"online" voices
     const natural = en.find(v => /natural|online|neural/i.test(v.name));
     if (natural) return natural;
-    // Prefer non-default local voices over the OS default
     const nonDefault = en.find(v => !v.default);
     return nonDefault || en[0];
   }, []);
@@ -83,11 +94,13 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
     const next = queueRef.current.shift();
     if (!next) return;
     speakingRef.current = true;
+    const isQuiet = quietRef.current;
+    const gap = isQuiet ? QUIET_GAP_BETWEEN_PHRASES_MS : NORMAL_GAP_BETWEEN_PHRASES_MS;
     try {
       const utter = new SpeechSynthesisUtterance(next);
-      utter.rate = 0.95;
-      utter.pitch = 1.05;
-      utter.volume = 1;
+      utter.rate = isQuiet ? 1.05 : 0.95;
+      utter.pitch = isQuiet ? 1 : 1.05;
+      utter.volume = isQuiet ? QUIET_VOLUME : NORMAL_VOLUME;
       utter.lang = 'en-US';
 
       const voice = pickBestVoice();
@@ -98,18 +111,18 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
 
       utter.onend = () => {
         speakingRef.current = false;
-        setTimeout(() => speakNext(), GAP_BETWEEN_PHRASES_MS);
+        setTimeout(() => speakNext(), gap);
       };
       utter.onerror = () => {
         speakingRef.current = false;
-        setTimeout(() => speakNext(), GAP_BETWEEN_PHRASES_MS);
+        setTimeout(() => speakNext(), gap);
       };
       window.speechSynthesis.speak(utter);
     } catch (e) {
       speakingRef.current = false;
       console.log('Speech synthesis failed', e);
     }
-  }, [supported]);
+  }, [supported, pickBestVoice]);
 
   useEffect(() => {
     if (!enabled || !supported) return;
@@ -120,10 +133,11 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
       if (s.finalScore < 4) return;
 
       const now = Date.now();
+      const cooldown = quietRef.current ? QUIET_PART_COOLDOWN_MS : NORMAL_PART_COOLDOWN_MS;
       const parts: PartKey[] = ['neck', 'trunk', 'upperArm', 'lowerArm', 'wrist'];
       const offending = parts
         .filter(p => (s as any)[p] >= PART_THRESHOLDS[p])
-        .filter(p => now - lastSpokenAtRef.current[p] >= PART_COOLDOWN_MS)
+        .filter(p => now - lastSpokenAtRef.current[p] >= cooldown)
         .sort((a, b) => (s as any)[b] - (s as any)[a])
         .slice(0, 3);
 
