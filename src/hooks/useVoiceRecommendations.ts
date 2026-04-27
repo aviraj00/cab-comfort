@@ -36,6 +36,13 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
 
   useEffect(() => {
     setSupported(typeof window !== 'undefined' && 'speechSynthesis' in window);
+    // Voices load async in Chrome — trigger a load and re-render when ready
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      const handler = () => window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = handler;
+      return () => { window.speechSynthesis.onvoiceschanged = null; };
+    }
   }, []);
 
   useEffect(() => { scoresRef.current = scores; }, [scores]);
