@@ -7,13 +7,14 @@ import { PostureDetailsPanel } from '@/components/PostureDetailsPanel';
 import { DataExportPanel } from '@/components/DataExportPanel';
 import { VoiceToggle } from '@/components/VoiceToggle';
 import { usePostureDataCollection } from '@/hooks/usePostureDataCollection';
-import { useVoiceRecommendations } from '@/hooks/useVoiceRecommendations';
+import { useVoiceRecommendations, type VoiceLang } from '@/hooks/useVoiceRecommendations';
 
 const Index = () => {
   const { isLoading, rulaScores, landmarks, startDetection, isDetecting } = usePoseDetection();
   const { dataCount, isCollecting, exportToCSV, clearData, toggleCollection } = usePostureDataCollection(rulaScores, 3000);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const { supported: voiceSupported } = useVoiceRecommendations(rulaScores, voiceEnabled);
+  const [voiceLang, setVoiceLang] = useState<VoiceLang>('en');
+  const { supported: voiceSupported } = useVoiceRecommendations(rulaScores, voiceEnabled, voiceLang);
 
   const handleVideoReady = useCallback((video: HTMLVideoElement) => {
     startDetection(video);
@@ -34,6 +35,8 @@ const Index = () => {
           enabled={voiceEnabled}
           onToggle={() => setVoiceEnabled((v) => !v)}
           supported={voiceSupported}
+          lang={voiceLang}
+          onLangChange={setVoiceLang}
         />
       </div>
       <div className="absolute top-4 right-4 z-20 flex flex-col gap-3 max-w-[280px]">
