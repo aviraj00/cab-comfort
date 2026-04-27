@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { RULAScores } from '@/utils/rulaCalculations';
 
-// Normal mode timings
-const NORMAL_PART_COOLDOWN_MS = 20000;
-const NORMAL_GAP_BETWEEN_PHRASES_MS = 1200;
+// Normal mode timings — generous spacing so the driver isn't nagged
+const NORMAL_PART_COOLDOWN_MS = 45000; // don't repeat same body-part advice for 45s
+const NORMAL_GAP_BETWEEN_PHRASES_MS = 3000; // 3s pause between consecutive recommendations
 const NORMAL_VOLUME = 1;
 
-// Quiet mode timings (softer + tighter spacing so alerts feel more ambient)
-const QUIET_PART_COOLDOWN_MS = 8000;
-const QUIET_GAP_BETWEEN_PHRASES_MS = 400;
+// Quiet mode — softer + a bit tighter, but still calm
+const QUIET_PART_COOLDOWN_MS = 25000;
+const QUIET_GAP_BETWEEN_PHRASES_MS = 1500;
 const QUIET_VOLUME = 0.35;
+
+// Minimum gap between any two spoken alerts, regardless of source
+const MIN_ALERT_INTERVAL_MS = 5000;
 
 const CHECK_INTERVAL_MS = 2000;
 
