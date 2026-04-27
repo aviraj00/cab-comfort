@@ -10,10 +10,10 @@ import { usePostureDataCollection } from '@/hooks/usePostureDataCollection';
 import { useVoiceRecommendations } from '@/hooks/useVoiceRecommendations';
 
 const Index = () => {
-  const { isLoading, rulaScores, landmarks, startDetection, isDetecting } = usePoseDetection();
-  const { dataCount, isCollecting, exportToCSV, clearData, toggleCollection } = usePostureDataCollection(rulaScores, 3000);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [quietMode, setQuietMode] = useState(false);
+  const { isLoading, rulaScores, landmarks, startDetection, isDetecting } = usePoseDetection();
+  const { dataCount, isCollecting, exportToCSV, clearData, toggleCollection } = usePostureDataCollection(rulaScores, 3000);
   const { supported: voiceSupported } = useVoiceRecommendations(rulaScores, voiceEnabled, quietMode);
 
   const handleVideoReady = useCallback((video: HTMLVideoElement) => {
