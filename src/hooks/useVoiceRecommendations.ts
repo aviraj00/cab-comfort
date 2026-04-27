@@ -36,9 +36,46 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
 
   useEffect(() => {
     setSupported(typeof window !== 'undefined' && 'speechSynthesis' in window);
+    // Voices load async in Chrome — trigger a load and re-render when ready
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      const handler = () => window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = handler;
+      return () => { window.speechSynthesis.onvoiceschanged = null; };
+    }
   }, []);
 
   useEffect(() => { scoresRef.current = scores; }, [scores]);
+
+  const pickBestVoice = useCallback((): SpeechSynthesisVoice | null => {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return null;
+    const en = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
+    if (!en.length) return null;
+    // Preferred high-quality voices across browsers/OSes (ordered)
+    const preferred = [
+      'Google UK English Female',
+      'Google US English',
+      'Microsoft Aria Online (Natural) - English (United States)',
+      'Microsoft Jenny Online (Natural) - English (United States)',
+      'Microsoft Guy Online (Natural) - English (United States)',
+      'Microsoft Aria',
+      'Microsoft Jenny',
+      'Samantha',
+      'Karen',
+      'Daniel',
+    ];
+    for (const name of preferred) {
+      const m = en.find(v => v.name === name);
+      if (m) return m;
+    }
+    // Prefer "natural"/"online" voices
+    const natural = en.find(v => /natural|online|neural/i.test(v.name));
+    if (natural) return natural;
+    // Prefer non-default local voices over the OS default
+    const nonDefault = en.find(v => !v.default);
+    return nonDefault || en[0];
+  }, []);
 
   const speakNext = useCallback(() => {
     if (!supported) return;
@@ -48,14 +85,16 @@ export function useVoiceRecommendations(scores: RULAScores | null, enabled: bool
     speakingRef.current = true;
     try {
       const utter = new SpeechSynthesisUtterance(next);
-      utter.rate = 1;
-      utter.pitch = 1;
+      utter.rate = 0.95;
+      utter.pitch = 1.05;
       utter.volume = 1;
       utter.lang = 'en-US';
 
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.lang.toLowerCase().startsWith('en'));
-      if (match) utter.voice = match;
+      const voice = pickBestVoice();
+      if (voice) {
+        utter.voice = voice;
+        utter.lang = voice.lang;
+      }
 
       utter.onend = () => {
         speakingRef.current = false;
