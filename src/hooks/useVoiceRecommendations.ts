@@ -47,6 +47,7 @@ export function useVoiceRecommendations(
   });
   const queueRef = useRef<string[]>([]);
   const speakingRef = useRef(false);
+  const lastAlertEndedAtRef = useRef<number>(0);
   const scoresRef = useRef<RULAScores | null>(null);
   const quietRef = useRef(quiet);
 
@@ -94,6 +95,15 @@ export function useVoiceRecommendations(
   const speakNext = useCallback(() => {
     if (!supported) return;
     if (speakingRef.current) return;
+    if (queueRef.current.length === 0) return;
+
+    // Enforce a global minimum interval between alerts so the driver gets breathing room
+    const sinceLast = Date.now() - lastAlertEndedAtRef.current;
+    if (sinceLast < MIN_ALERT_INTERVAL_MS) {
+      setTimeout(() => speakNext(), MIN_ALERT_INTERVAL_MS - sinceLast);
+      return;
+    }
+
     const next = queueRef.current.shift();
     if (!next) return;
     speakingRef.current = true;
@@ -112,14 +122,13 @@ export function useVoiceRecommendations(
         utter.lang = voice.lang;
       }
 
-      utter.onend = () => {
+      const finish = () => {
         speakingRef.current = false;
+        lastAlertEndedAtRef.current = Date.now();
         setTimeout(() => speakNext(), gap);
       };
-      utter.onerror = () => {
-        speakingRef.current = false;
-        setTimeout(() => speakNext(), gap);
-      };
+      utter.onend = finish;
+      utter.onerror = finish;
       window.speechSynthesis.speak(utter);
     } catch (e) {
       speakingRef.current = false;
@@ -141,17 +150,16 @@ export function useVoiceRecommendations(
       const offending = parts
         .filter(p => (s as any)[p] >= PART_THRESHOLDS[p])
         .filter(p => now - lastSpokenAtRef.current[p] >= cooldown)
-        .sort((a, b) => (s as any)[b] - (s as any)[a])
-        .slice(0, 3);
+        .sort((a, b) => (s as any)[b] - (s as any)[a]);
 
       if (offending.length === 0) return;
 
+      // Only enqueue ONE recommendation per tick (the worst offender) so the
+      // driver hears focused, well-spaced advice instead of a burst.
+      const worst = offending[0];
       const prefix = s.finalScore >= 6 ? PREFIX.critical : PREFIX.warn;
-      offending.forEach((p, idx) => {
-        const text = (idx === 0 ? prefix : '') + MESSAGES[p];
-        queueRef.current.push(text);
-        lastSpokenAtRef.current[p] = now;
-      });
+      queueRef.current.push(prefix + MESSAGES[worst]);
+      lastSpokenAtRef.current[worst] = now;
 
       speakNext();
     };
