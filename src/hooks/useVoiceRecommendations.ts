@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { RULAScores } from '@/utils/rulaCalculations';
 
-export type VoiceLang = 'en' | 'hi';
-
 const PART_COOLDOWN_MS = 20000; // per-part cooldown
 const GAP_BETWEEN_PHRASES_MS = 1200; // pause between body-part messages
 const CHECK_INTERVAL_MS = 2000; // how often we look for new things to say
@@ -17,33 +15,17 @@ const PART_THRESHOLDS: Record<PartKey, number> = {
   wrist: 3,
 };
 
-const MESSAGES: Record<VoiceLang, Record<PartKey, string>> = {
-  en: {
-    neck: 'Please straighten your neck and look forward.',
-    trunk: 'Sit upright and align your back with the seat.',
-    upperArm: 'Relax your shoulders and lower your upper arms.',
-    lowerArm: 'Adjust your elbow angle, keep it near ninety degrees.',
-    wrist: 'Keep your wrists straight on the steering wheel.',
-  },
-  hi: {
-    neck: 'Kripya apni gardan seedhi rakhein aur saamne dekhein.',
-    trunk: 'Seedhe baithein aur apni peeth ko seat se lagayein.',
-    upperArm: 'Apne kandhe relax karein aur baazu neeche rakhein.',
-    lowerArm: 'Apni kohni ka kon theek karein, lagbhag navve degree rakhein.',
-    wrist: 'Steering par apni kalai seedhi rakhein.',
-  },
+const MESSAGES: Record<PartKey, string> = {
+  neck: 'Please straighten your neck and look forward.',
+  trunk: 'Sit upright and align your back with the seat.',
+  upperArm: 'Relax your shoulders and lower your upper arms.',
+  lowerArm: 'Adjust your elbow angle, keep it near ninety degrees.',
+  wrist: 'Keep your wrists straight on the steering wheel.',
 };
 
-const PREFIX: Record<VoiceLang, { warn: string; critical: string }> = {
-  en: { warn: 'Posture warning. ', critical: 'Critical posture alert. ' },
-  hi: { warn: 'Mudra chetavni. ', critical: 'Atyant zaroori mudra sudhar. ' },
-};
+const PREFIX = { warn: 'Posture warning. ', critical: 'Critical posture alert. ' };
 
-export function useVoiceRecommendations(
-  scores: RULAScores | null,
-  enabled: boolean,
-  lang: VoiceLang = 'en'
-) {
+export function useVoiceRecommendations(scores: RULAScores | null, enabled: boolean) {
   const [supported, setSupported] = useState(false);
   const lastSpokenAtRef = useRef<Record<PartKey, number>>({
     neck: 0, trunk: 0, upperArm: 0, lowerArm: 0, wrist: 0,
@@ -66,14 +48,13 @@ export function useVoiceRecommendations(
     speakingRef.current = true;
     try {
       const utter = new SpeechSynthesisUtterance(next);
-      utter.rate = lang === 'hi' ? 0.95 : 1;
+      utter.rate = 1;
       utter.pitch = 1;
       utter.volume = 1;
-      utter.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+      utter.lang = 'en-US';
 
-      // try to pick a matching voice if available
       const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.lang.toLowerCase().startsWith(utter.lang.toLowerCase()));
+      const match = voices.find(v => v.lang.toLowerCase().startsWith('en'));
       if (match) utter.voice = match;
 
       utter.onend = () => {
@@ -89,9 +70,8 @@ export function useVoiceRecommendations(
       speakingRef.current = false;
       console.log('Speech synthesis failed', e);
     }
-  }, [supported, lang]);
+  }, [supported]);
 
-  // Periodically check which body parts need correction and enqueue messages
   useEffect(() => {
     if (!enabled || !supported) return;
 
@@ -105,15 +85,14 @@ export function useVoiceRecommendations(
       const offending = parts
         .filter(p => (s as any)[p] >= PART_THRESHOLDS[p])
         .filter(p => now - lastSpokenAtRef.current[p] >= PART_COOLDOWN_MS)
-        // worst first
         .sort((a, b) => (s as any)[b] - (s as any)[a])
         .slice(0, 3);
 
       if (offending.length === 0) return;
 
-      const prefix = s.finalScore >= 6 ? PREFIX[lang].critical : PREFIX[lang].warn;
+      const prefix = s.finalScore >= 6 ? PREFIX.critical : PREFIX.warn;
       offending.forEach((p, idx) => {
-        const text = (idx === 0 ? prefix : '') + MESSAGES[lang][p];
+        const text = (idx === 0 ? prefix : '') + MESSAGES[p];
         queueRef.current.push(text);
         lastSpokenAtRef.current[p] = now;
       });
@@ -123,9 +102,8 @@ export function useVoiceRecommendations(
 
     const id = window.setInterval(tick, CHECK_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [enabled, supported, lang, speakNext]);
+  }, [enabled, supported, speakNext]);
 
-  // Stop everything when disabled or language changes
   useEffect(() => {
     if (!supported) return;
     if (!enabled) {
@@ -134,14 +112,6 @@ export function useVoiceRecommendations(
       speakingRef.current = false;
     }
   }, [enabled, supported]);
-
-  useEffect(() => {
-    if (!supported) return;
-    // language changed: clear queue so new language is used next time
-    window.speechSynthesis.cancel();
-    queueRef.current = [];
-    speakingRef.current = false;
-  }, [lang, supported]);
 
   return { supported };
 }
