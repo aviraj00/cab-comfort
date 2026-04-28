@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RULAScores } from '@/utils/rulaCalculations';
-import { AlertTriangle, Volume2, VolumeX } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { AlertTriangle } from 'lucide-react';
 
 interface PostureAlertProps {
   scores: RULAScores | null;
@@ -10,7 +9,7 @@ interface PostureAlertProps {
 
 export function PostureAlert({ scores }: PostureAlertProps) {
   const [showAlert, setShowAlert] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const soundEnabled = true;
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastAlertTimeRef = useRef<number>(0);
 
@@ -81,22 +80,6 @@ export function PostureAlert({ scores }: PostureAlertProps) {
 
   return (
     <>
-      {/* Sound toggle */}
-      <div className="absolute top-4 right-4 z-20">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setSoundEnabled(!soundEnabled)}
-          className="bg-card/50 backdrop-blur-sm hover:bg-card/80"
-        >
-          {soundEnabled ? (
-            <Volume2 className="h-5 w-5 text-muted-foreground" />
-          ) : (
-            <VolumeX className="h-5 w-5 text-muted-foreground" />
-          )}
-        </Button>
-      </div>
-
       {/* Alert banner */}
       <AnimatePresence>
         {showAlert && config && (
